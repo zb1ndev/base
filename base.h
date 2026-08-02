@@ -60,12 +60,8 @@ extern "C" {
 #if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
     #if !defined(__STDC_NO_ATOMICS__)
         #include <stdatomic.h>
-        #define BASE_HAS_STDATOMIC 1
-    #else
-        #define BASE_HAS_STDATOMIC 0
+        #define BASE_HAS_STDATOMIC
     #endif // __STDC_NO_ATOMICS__
-#else
-    #define BASE_HAS_STDATOMIC 0
 #endif // __STDC_VERSION__
 
 #if !defined(BASE_CALLOC)
@@ -84,27 +80,27 @@ extern "C" {
     #undef EXIT_FAILURE
 #endif // EXIT_FAILURE
 
-#define EXIT_FAILURE -1
+#define EXIT_FAILURE                                -1
 
 // -==================================================- //
 //                    PLATFORM DEFINES                  //
 // -==================================================- //
 
 #if defined(_WIN32) || defined(_WIN64)
-    #define BASE_PLATFORM_WINDOWS 1
+    #define BASE_PLATFORM_WINDOWS
 #elif defined(__APPLE__) && defined(__MACH__)
     #include <TargetConditionals.h>
-    #define BASE_PLATFORM_APPLE 1
+    #define BASE_PLATFORM_APPLE
 #elif defined(__linux__)
-    #define BASE_PLATFORM_LINUX 1
+    #define BASE_PLATFORM_LINUX
 #elif defined(__ANDROID__)
-    #define BASE_PLATFORM_ANDROID 1
+    #define BASE_PLATFORM_ANDROID
 #endif // _WIN32 || _WIN64
 
 #if defined(_WIN64) || defined(__x86_64__) || defined(__ppc64__) || defined(__aarch64__)
-    #define BASE_ARCH_64BIT 1
+    #define BASE_ARCH_64BIT
 #else
-    #define BASE_ARCH_32BIT 1
+    #define BASE_ARCH_32BIT
 #endif // _WIN64 || __x86_64__ || __ppc64__ || __aarch64__
 
 // -==================================================- //
@@ -112,8 +108,8 @@ extern "C" {
 // -==================================================- //
 
 typedef void*           void_ptr_t;
-typedef int8_t*         char_ptr_t;
-typedef uint8_t*        uchar_ptr_t;
+typedef int8_t*         i8_ptr_t;
+typedef uint8_t*        u8_ptr_t;
 
 typedef uint8_t         scratch_t[1024];
 
@@ -123,9 +119,10 @@ typedef uint8_t         scratch_t[1024];
 
 typedef int16_t         err_t;
 
-void                    print_error                 (err_t code, const char_ptr_t message);
+void                    print_error                 (err_t code, const i8_ptr_t message);
 
-typedef enum timer_cmd_t { 
+typedef enum timer_cmd_t {
+    TC_GET              = 0,
     TC_START            = 1, 
     TC_END              = 2
 } timer_cmd_t;
@@ -201,34 +198,34 @@ typedef uint16_t        bitmask16_t;
 typedef uint32_t        bitmask32_t;
 typedef uint64_t        bitmask64_t;
 
-typedef uint8_t         bitmask128_t                [16];
+typedef uint64_t        bitmask128_t                [2];
 #define empty_bitmask128_t                          {0}
 
 uint32_t                bitmask128_seek             (uint32_t* bit_out, uint32_t idx);
 err_t                   bitmask128_set              (bitmask128_t bitmask, uint32_t idx, uint8_t val);
 int8_t                  bitmask128_get              (bitmask128_t bitmask, uint32_t idx);
 
-array_t(char)           get_binary_as_cstr          (uint8_t numbers[], uint16_t nnumbers);
+array_t(char)           bitmask_to_cstr             (uint64_t numbers[], uint16_t nnumbers);
 
 // -==================================================- //
 //                        STRINGS                       //
 // -==================================================- //
 
 #define strfmt                                      "%.*s"
-#define strarg(str)                                 (int)str.size, str.data
+#define strarg(str)                                 (int)(str).size, (str).data
 
-typedef struct string_t string_t;
-struct string_t {
-    uchar_ptr_t         data;
+typedef struct utf8_t utf8_t;
+struct utf8_t {
+    u8_ptr_t            data;
     uint64_t            size;
 };
-#define empty_string_t                              (string_t) {0}
-#define string_from_literal(data)                   (string_t) {data,(uint64_t)sizeof(data) - 1}
-#define string_from_view(data, size)                (string_t) {data, size}
+#define empty_utf8_t                                (utf8_t) {0}
+#define utf8_from_literal(data)                     (utf8_t) {data,(uint64_t)sizeof(data) - 1}
+#define utf8_from_view(data, size)                  (utf8_t) {data, size}
 
-string_t                string_from                 (arena_t* arena, const char_ptr_t fmt, ...);
-string_t                string_from_size            (arena_t* arena, uint64_t size);
-void                    string_drop                 (arena_t* arena, string_t* ptr);
+utf8_t                  utf8_from                   (arena_t* arena, const i8_ptr_t fmt, ...);
+utf8_t                  utf8_from_size              (arena_t* arena, uint64_t size);
+void                    utf8_drop                   (arena_t* arena, utf8_t* ptr);
 
 // -==================================================- //
 //                          SIMD                        //
@@ -257,10 +254,15 @@ void                    string_drop                 (arena_t* arena, string_t* p
 bitmask16_t             simd_match_16char           (uint8_t target, array_t(uint8_t) subjects, uint8_t subject_count, bool diff);
 bitmask8_t              simd_match_2u64             (uint64_t target, array_t(uint64_t) subjects, uint8_t subject_count, bool diff);
 
-#define BASE_IMPLEMENTATION                         // TODO(Joel Zbinden): Remove #define for release & install
+// -==================================================- //
+//               INTERLACED BLOCKED HASHMAP             //
+// -==================================================- //
+
+
+
 #if defined(BASE_IMPLEMENTATION)
 
-void print_error(err_t code, const char_ptr_t message) {
+void print_error(err_t code, const i8_ptr_t message) {
     
     errno = code;
     perror(message);
@@ -271,28 +273,18 @@ double timer(timer_cmd_t command) {
 
     local_persist clock_t start_time = 0;
     
-    switch (command) {
-
-        case TC_START : {
-            start_time = clock();
-            return 0.0;
-        }
-
-        case TC_END : { 
-            if (start_time == 0) 
-                return 0.0;
-            double result = ((double)(clock() - start_time) / CLOCKS_PER_SEC) * 1000.0;
-            start_time = 0;
-            return result;
-        }
-
-        default : {
-            if (start_time == 0) 
-                return 0.0;
-            return ((double)(clock() - start_time) / CLOCKS_PER_SEC) * 1000.0;
-        }
-
+    if (command == TC_START) {
+        start_time = clock();
+        return 0.0;
     }
+
+    if (start_time == 0)
+        return 0.0;
+    double result = ((double)(clock() - start_time) / CLOCKS_PER_SEC) * 1000.0;
+
+    if (command == TC_END)
+        start_time = 0;
+    return result;
 
 }
 
@@ -399,7 +391,7 @@ void_ptr_t array_create_f(arena_t* arena, uint64_t type_size, uint64_t size) {
 
         head = BASE_CALLOC(sizeof(array_head_t) + (size * type_size), 1);
         if (head == nullptr) {
-            print_error(errno, "array_create: calloc");
+            print_error(errno, "array_create_f: calloc");
             return nullptr;
         }
 
@@ -409,7 +401,7 @@ void_ptr_t array_create_f(arena_t* arena, uint64_t type_size, uint64_t size) {
 
     head = arena_alloc(arena, size * type_size, type_size);
     if (head == nullptr) {
-        print_error(errno, "array_create: arena_alloc");
+        print_error(errno, "array_create_f: arena_alloc");
         return nullptr;
     }
 
@@ -433,7 +425,7 @@ err_t array_resize_f(arena_t* arena, void_ptr_t* arr, uint64_t size) {
 
         head = recalloc(array_head(*arr), sizeof(array_head_t) + (size * array_type(*arr)), sizeof(array_head_t) + (array_capacity(*arr) * array_type(*arr)));
         if (head == nullptr) {
-            print_error(errno, "array_resize: recalloc");
+            print_error(errno, "array_resize_f: recalloc");
             return EXIT_FAILURE;
         }
 
@@ -466,8 +458,8 @@ uint32_t bitmask128_seek(uint32_t* bit_out, uint32_t idx) {
     // and the bit position within that integer.
 
     if (bit_out != nullptr)
-        *bit_out = idx & 7;
-    return idx >> 3;
+        *bit_out = idx & 63;
+    return idx >> 6;
 
 }
 
@@ -499,9 +491,9 @@ int8_t bitmask128_get(bitmask128_t bitmask, uint32_t idx) {
 
 }
 
-array_t(char) get_binary_as_cstr(uint8_t numbers[], uint16_t nnumbers) {
+array_t(char) bitmask_to_cstr(uint64_t numbers[], uint16_t nnumbers) {
 
-    const uint16_t PRECISION = 8;
+    const uint16_t PRECISION = 64;
     array_t(char) result = array_create(nullptr, char, (PRECISION * nnumbers) + 1);
     for (uint16_t n = 0; n < nnumbers; n++)
         for (uint16_t i = 0; i < PRECISION; i++)
@@ -510,15 +502,15 @@ array_t(char) get_binary_as_cstr(uint8_t numbers[], uint16_t nnumbers) {
 
 }
 
-string_t string_from(arena_t* arena, const char_ptr_t fmt, ...) {
+utf8_t utf8_from(arena_t* arena, const i8_ptr_t fmt, ...) {
 
     if (fmt == nullptr) {
-        print_error(EINVAL, "string_from");
-        return empty_string_t;
+        print_error(EINVAL, "utf8_from");
+        return empty_utf8_t;
     }
 
     va_list list;
-    string_t result = empty_string_t;
+    utf8_t result = empty_utf8_t;
 
     va_start(list, fmt);
     result.size = vsnprintf(nullptr, 0, fmt, list);
@@ -528,8 +520,8 @@ string_t string_from(arena_t* arena, const char_ptr_t fmt, ...) {
 
         result.data = BASE_CALLOC(result.size, sizeof(char));
         if (result.data == nullptr) {
-            print_error(errno, "string_from: calloc");
-            return empty_string_t;
+            print_error(errno, "utf8_from: calloc");
+            return empty_utf8_t;
         }
 
         goto finish;
@@ -538,8 +530,8 @@ string_t string_from(arena_t* arena, const char_ptr_t fmt, ...) {
 
     result.data = arena_alloc(arena, result.size, 1);
     if (result.data == nullptr) {
-        print_error(errno, "string_from: arena_alloc");
-        return empty_string_t;
+        print_error(errno, "utf8_from: arena_alloc");
+        return empty_utf8_t;
     }
 
 finish:
@@ -552,21 +544,21 @@ finish:
 
 }
 
-string_t string_from_size(arena_t* arena, uint64_t size) {
+utf8_t utf8_from_size(arena_t* arena, uint64_t size) {
 
     if (size == 0) {
-        print_error(EINVAL, "string_from_size");
-        return empty_string_t;
+        print_error(EINVAL, "utf8_from_size");
+        return empty_utf8_t;
     }
 
-    string_t result = empty_string_t;
+    utf8_t result = empty_utf8_t;
 
     if (arena == nullptr) {
 
         result.data = BASE_CALLOC(size, sizeof(char));
         if (result.data == nullptr) {
-            print_error(errno, "string_from_size: calloc");
-            return empty_string_t;
+            print_error(errno, "utf8_from_size: calloc");
+            return empty_utf8_t;
         }
 
         return result;
@@ -575,15 +567,15 @@ string_t string_from_size(arena_t* arena, uint64_t size) {
 
     result.data = arena_alloc(arena, size, 1);
     if (result.data == nullptr) {
-        print_error(errno, "string_from: arena_alloc");
-        return empty_string_t;
+        print_error(errno, "utf8_from_size: arena_alloc");
+        return empty_utf8_t;
     }
 
     return result;
 
 }
 
-void string_drop(arena_t* arena, string_t* ptr) {
+void utf8_drop(arena_t* arena, utf8_t* ptr) {
 
     if (arena == nullptr)
         free(ptr->data);
@@ -595,6 +587,24 @@ bitmask16_t simd_match_16char(uint8_t target, uint8_t subjects[16], uint8_t subj
     // NOTE(Joel Zbinden): subjects must be 16 byte aligned as 
     // the aligned load SIMD instruction requires this.
     assert(((uintptr_t)subjects & 15) == 0);
+
+#if defined(BASE_SIMD_NEON)
+
+    #error ARM Neon is currently not implemented.
+
+#endif // BASE_SIMD_NEON
+
+#if defined(BASE_SIMD_SVE)
+
+    #error ARM SVE is currently not implemented.
+
+#endif // BASE_SIMD_SVE
+
+#if defined(BASE_SIMD_WASM)
+
+    #error WASM SIMD is currently not implemented.
+
+#endif // BASE_SIMD_WASM
 
 #if defined(BASE_SIMD_X86)
 
@@ -622,6 +632,24 @@ bitmask8_t simd_match_2u64(uint64_t target, uint64_t subjects[2], uint8_t subjec
     // NOTE(Joel Zbinden): subjects must be 16 byte aligned as 
     // the aligned load SIMD instruction requires this.
     assert(((uintptr_t)subjects & 15) == 0);
+
+#if defined(BASE_SIMD_NEON)
+
+    #error ARM Neon is currently not implemented.
+
+#endif // BASE_SIMD_NEON
+
+#if defined(BASE_SIMD_SVE)
+
+    #error ARM SVE is currently not implemented.
+
+#endif // BASE_SIMD_SVE
+
+#if defined(BASE_SIMD_WASM)
+
+    #error WASM SIMD is currently not implemented.
+
+#endif // BASE_SIMD_WASM
 
 #if defined(BASE_SIMD_X86)
 

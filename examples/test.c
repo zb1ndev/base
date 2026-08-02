@@ -1,5 +1,7 @@
-// #define BASE_IMPLEMENTATION
+#define BASE_IMPLEMENTATION
 #include <base.h>
+
+// TODO(Joel Zbinden): Automate tests
 
 err_t test_array(arena_t* arena) {
 
@@ -21,6 +23,7 @@ err_t test_array(arena_t* arena) {
         printf("%d, ", int_array[i]);
     printf("\n");
 
+    array_drop(arena, int_array);
     return EXIT_SUCCESS;
 
 }
@@ -29,15 +32,15 @@ err_t test_string(arena_t* arena) {
     
     printf("\nTesting strings %s...\n", arena != nullptr ? "with arenas" : "");
     
-    string_t lit = string_from_literal("Hello World\n");
+    utf8_t lit = utf8_from_literal("Hello World\n");
     printf(strfmt"\n", strarg(lit));
     
-    string_t view = string_from_view("Hello World", 5);
+    utf8_t view = utf8_from_view("Hello World", 5);
     printf(strfmt"\n", strarg(view));
 
-    string_t alloc = string_from(arena, "Hello %s", "James");
+    utf8_t alloc = utf8_from(arena, "Hello %s", "James");
     printf(strfmt"\n", strarg(alloc));
-    string_drop(arena, &alloc);
+    utf8_drop(arena, &alloc);
 
     return EXIT_SUCCESS;
 
@@ -48,7 +51,7 @@ err_t test_arena(void) {
     printf("\nTesting arenas...\n");
 
     arena_t arena = arena_create(1024);
-    char_ptr_t string = arena_alloc(&arena, 13, 1);
+    i8_ptr_t string = arena_alloc(&arena, 13, 1);
     sprintf(string, "Hello World\n");
 
     printf("%s", string);
@@ -74,16 +77,16 @@ err_t test_bitmask(void) {
 
     bitmask128_t bitmask = empty_bitmask128_t;
 
-    array_t(char) result = get_binary_as_cstr(bitmask, 16);
+    array_t(char) result = bitmask_to_cstr(bitmask, 2);
     printf("result: %s\n", result);
     array_drop(nullptr, result);
 
     bitmask128_set(bitmask, 18, 1);
 
-    result = get_binary_as_cstr(bitmask, 16);
+    result = bitmask_to_cstr(bitmask, 2);
     printf("result: %s\n\n", result);
     array_drop(nullptr, result);
-
+    
     return EXIT_SUCCESS;
 
 }
