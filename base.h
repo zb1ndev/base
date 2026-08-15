@@ -484,7 +484,7 @@ uint64_t base_alloc_get_size(arena_t* arena, void_ptr_t ptr, uint16_t alignment)
         return null;
     }
 
-    assert((uintptr_t)ptr & (alignment - 1) == 0);
+    assert(((uintptr_t)ptr & (alignment - 1)) == 0);
     uint64_t head_offset = aligned(sizeof(alloc_head_t), alignment);
     return *(alloc_head_t*)(ptr - (void_ptr_t)head_offset);
 
@@ -497,7 +497,7 @@ void_ptr_t base_realloc(arena_t* arena, void_ptr_t prev, uint64_t size, uint16_t
         return nullptr;
     } 
 
-    assert((uintptr_t)prev & (alignment - 1) == 0);
+    assert(((uintptr_t)prev & (alignment - 1)) == 0);
     uint64_t head_offset = aligned(sizeof(alloc_head_t), alignment);
     uint64_t real_size = size + (alignment - 1) + sizeof(alloc_head_t);
     alloc_head_t head = *(alloc_head_t*)(prev - (void_ptr_t)head_offset);
@@ -507,7 +507,7 @@ void_ptr_t base_realloc(arena_t* arena, void_ptr_t prev, uint64_t size, uint16_t
 
     if (arena == nullptr) {
 
-        alloc_head_t* result_head = realloc(prev, real_size);
+        alloc_head_t* result_head = realloc((alloc_head_t*)(prev - (void_ptr_t)head_offset), real_size);
         if (result_head == nullptr) {
             print_error(errno, "base_realloc: realloc");
             return nullptr;
