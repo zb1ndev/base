@@ -148,14 +148,14 @@ i8_ptr_t                arena_strdup                (arena_t* arena, i8_ptr_t sr
 #define                 aligned(ptr, aln)           (((uintptr_t)(ptr) + ((aln) - 1)) & ~((aln) - 1))
 void_ptr_t              recalloc                    (void_ptr_t ptr, uint64_t nsize, uint64_t osize);
 
-typedef uint64_t alloc_head_t;
+// typedef uint64_t alloc_head_t;
 
-void_ptr_t              base_alloc                  (arena_t* arena, uint64_t size, uint16_t alignment);
-uint64_t                base_alloc_get_size         (arena_t* arena, void_ptr_t ptr, uint16_t alignment);
-void_ptr_t              base_realloc                (arena_t* arena, void_ptr_t prev, uint64_t size, uint16_t alignment);
-void                    base_free                   (arena_t* arena, void_ptr_t ptr, uint16_t alignment);
+// void_ptr_t              base_alloc                  (arena_t* arena, uint64_t size, uint16_t alignment);
+// uint64_t                base_alloc_get_size         (arena_t* arena, void_ptr_t ptr, uint16_t alignment);
+// void_ptr_t              base_realloc                (arena_t* arena, void_ptr_t prev, uint64_t size, uint16_t alignment);
+// void                    base_free                   (arena_t* arena, void_ptr_t ptr, uint16_t alignment);
 
-i8_ptr_t                base_strdup                 (arena_t* arena, i8_ptr_t src);
+// i8_ptr_t                base_strdup                 (arena_t* arena, i8_ptr_t src);
 
 // -==================================================- //
 //                GENERIC DYNAMIC ARRAYS                //
@@ -384,113 +384,113 @@ i8_ptr_t arena_strdup(arena_t* arena, i8_ptr_t src) {
 
 }
 
-void_ptr_t base_alloc(arena_t* arena, uint64_t size, uint16_t alignment) {
+// void_ptr_t base_alloc(arena_t* arena, uint64_t size, uint16_t alignment) {
 
-    if (size == 0) {
-        print_error(EINVAL, "base_realloc");
-        return nullptr;
-    } 
+//     if (size == 0) {
+//         print_error(EINVAL, "base_realloc");
+//         return nullptr;
+//     } 
 
-    uint64_t real_size = size + (alignment - 1) + sizeof(alloc_head_t);
+//     uint64_t real_size = size + (alignment - 1) + sizeof(alloc_head_t);
 
-    if (arena == nullptr) {
+//     if (arena == nullptr) {
 
-        alloc_head_t* head = aligned_alloc(alignment, real_size);
-        if (head == nullptr) {
-            print_error(errno, "base_alloc: aligned_alloc");
-            return nullptr;
-        }
+//         alloc_head_t* head = aligned_alloc(alignment, real_size);
+//         if (head == nullptr) {
+//             print_error(errno, "base_alloc: aligned_alloc");
+//             return nullptr;
+//         }
 
-        memset(head, 0, real_size);
-        *head = size;
-        return (void_ptr_t)aligned((void_ptr_t)(head + 1), alignment);
+//         memset(head, 0, real_size);
+//         *head = size;
+//         return (void_ptr_t)aligned((void_ptr_t)(head + 1), alignment);
 
-    }
+//     }
 
-    alloc_head_t* head = arena_alloc(arena, real_size, alignment);
-    if (head == nullptr) {
-        print_error(errno, "base_alloc: arena_alloc");
-        return nullptr;
-    }
+//     alloc_head_t* head = arena_alloc(arena, real_size, alignment);
+//     if (head == nullptr) {
+//         print_error(errno, "base_alloc: arena_alloc");
+//         return nullptr;
+//     }
 
-    *head = size;
-    return (void_ptr_t)aligned((void_ptr_t)(head + 1), alignment);
+//     *head = size;
+//     return (void_ptr_t)aligned((void_ptr_t)(head + 1), alignment);
 
-}
+// }
 
-uint64_t base_alloc_get_size(arena_t* arena, void_ptr_t ptr, uint16_t alignment) {
+// uint64_t base_alloc_get_size(arena_t* arena, void_ptr_t ptr, uint16_t alignment) {
 
-    if (ptr == nullptr) {
-        print_error(EINVAL, "base_realloc");
-        return null;
-    }
+//     if (ptr == nullptr) {
+//         print_error(EINVAL, "base_realloc");
+//         return null;
+//     }
 
-    assert(((uintptr_t)ptr & (alignment - 1)) == 0);
-    uint64_t head_offset = aligned(sizeof(alloc_head_t), alignment);
-    return *(alloc_head_t*)(ptr - (void_ptr_t)head_offset);
+//     assert(((uintptr_t)ptr & (alignment - 1)) == 0);
+//     uint64_t head_offset = aligned(sizeof(alloc_head_t), alignment);
+//     return *(alloc_head_t*)(ptr - (void_ptr_t)head_offset);
 
-}
+// }
 
-void_ptr_t base_realloc(arena_t* arena, void_ptr_t prev, uint64_t size, uint16_t alignment) {
+// void_ptr_t base_realloc(arena_t* arena, void_ptr_t prev, uint64_t size, uint16_t alignment) {
 
-    if (prev == nullptr || size == 0) {
-        print_error(EINVAL, "base_realloc");
-        return nullptr;
-    } 
+//     if (prev == nullptr || size == 0) {
+//         print_error(EINVAL, "base_realloc");
+//         return nullptr;
+//     } 
 
-    assert(((uintptr_t)prev & (alignment - 1)) == 0);
-    uint64_t head_offset = aligned(sizeof(alloc_head_t), alignment);
-    uint64_t real_size = size + (alignment - 1) + sizeof(alloc_head_t);
-    alloc_head_t head = *(alloc_head_t*)(prev - (void_ptr_t)head_offset);
+//     assert(((uintptr_t)prev & (alignment - 1)) == 0);
+//     uint64_t head_offset = aligned(sizeof(alloc_head_t), alignment);
+//     uint64_t real_size = size + (alignment - 1) + sizeof(alloc_head_t);
+//     alloc_head_t head = *(alloc_head_t*)(prev - (void_ptr_t)head_offset);
 
-    if (size <= head) 
-        return prev;
+//     if (size <= head) 
+//         return prev;
 
-    if (arena == nullptr) {
+//     if (arena == nullptr) {
 
-        alloc_head_t* result_head = realloc((alloc_head_t*)(prev - (void_ptr_t)head_offset), real_size);
-        if (result_head == nullptr) {
-            print_error(errno, "base_realloc: realloc");
-            return nullptr;
-        }
+//         alloc_head_t* result_head = realloc((alloc_head_t*)(prev - (void_ptr_t)head_offset), real_size);
+//         if (result_head == nullptr) {
+//             print_error(errno, "base_realloc: realloc");
+//             return nullptr;
+//         }
 
-        *result_head = size;
-        void_ptr_t result = (void_ptr_t)aligned((void_ptr_t)(result_head + 1), alignment); 
+//         *result_head = size;
+//         void_ptr_t result = (void_ptr_t)aligned((void_ptr_t)(result_head + 1), alignment); 
         
-        if (size <= head) 
-            return result;
-        return memset(result + head, 0, size - head);
+//         if (size <= head) 
+//             return result;
+//         return memset(result + head, 0, size - head);
 
-    }
+//     }
 
-    void_ptr_t result = base_alloc(arena, size, alignment);
-    if (result == nullptr) {
-        print_error(errno, "base_realloc: base_alloc");
-        return nullptr;
-    }
+//     void_ptr_t result = base_alloc(arena, size, alignment);
+//     if (result == nullptr) {
+//         print_error(errno, "base_realloc: base_alloc");
+//         return nullptr;
+//     }
 
-    return memcpy(result, prev, head);
+//     return memcpy(result, prev, head);
 
-}
+// }
 
-i8_ptr_t base_strdup(arena_t* arena, i8_ptr_t src) {
+// i8_ptr_t base_strdup(arena_t* arena, i8_ptr_t src) {
 
-    if (arena == null)
-        return strdup(src);
-    return arena_strdup(arena, src);
+//     if (arena == null)
+//         return strdup(src);
+//     return arena_strdup(arena, src);
 
-}
+// }
 
-void base_free(arena_t* arena, void_ptr_t ptr, uint16_t alignment) {
+// void base_free(arena_t* arena, void_ptr_t ptr, uint16_t alignment) {
     
-    if (arena != nullptr)
-        return;
+//     if (arena != nullptr)
+//         return;
 
-    assert((uintptr_t)ptr & (alignment - 1) == 0);
-    uint64_t head_offset = aligned(sizeof(alloc_head_t), alignment);
-    free((alloc_head_t*)(ptr - (void_ptr_t)head_offset));
+//     assert((uintptr_t)ptr & (alignment - 1) == 0);
+//     uint64_t head_offset = aligned(sizeof(alloc_head_t), alignment);
+//     free((alloc_head_t*)(ptr - (void_ptr_t)head_offset));
 
-}
+// }
 
 __attribute__((noinline)) // NOTE(Joel Zbinden): GCC giving false positives.
 void_ptr_t array_create_f(arena_t* arena, uint64_t type_size, uint64_t size) {
