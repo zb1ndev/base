@@ -199,7 +199,7 @@ uint32_t                bitmask128_seek             (uint32_t* bit_out, uint32_t
 err_t                   bitmask128_set              (bitmask128_t bitmask, uint32_t idx, uint8_t val);
 int8_t                  bitmask128_get              (bitmask128_t bitmask, uint32_t idx);
 
-i8_ptr_t                bitmask_to_cstr             (arena_t* arena, uint64_t numbers[], uint16_t nnumbers);
+char*                   bitmask_to_cstr             (arena_t* arena, uint64_t numbers[], uint16_t nnumbers);
 
 // -==================================================- //
 //                        STRINGS                       //
@@ -246,70 +246,11 @@ void                    utf8_drop                   (arena_t* arena, utf8_t* ptr
     #define BASE_SIMD_WASM
 #endif // __wasm_simd128__
 
-bitmask16_t             simd_match_16char           (uint8_t target, array_t(uint8_t) subjects, uint8_t subject_count, bool diff);
-bitmask8_t              simd_match_2u64             (uint64_t target, array_t(uint64_t) subjects, uint8_t subject_count, bool diff);
+internal inline bitmask16_t             simd_match_16u8             (uint8_t target, array_t(uint8_t) subjects);
+internal inline bitmask8_t              simd_match_4u32             (uint32_t target, array_t(uint32_t) subjects);
+internal inline bitmask8_t              simd_match_2u64             (uint64_t target, array_t(uint64_t) subjects);
 
-// -==================================================- //
-//                          ZENMAP                      //
-// -==================================================- //
-
-typedef struct collisions_t collisions_t;
-struct collisions_t {
-    u8_ptr_t            data, interlaced;           // NOTE(Joel Zbinden): must be 16 byte aligned, only interlaces the first character of strings held in data.
-    uint32_t            max, key_shift, key_max;    // NOTE(Joel Zbinden): must be a power of 2.
-    array_t(uint32_t)   free_list;
-};
-#define empty_collisions_t                          (collisions_t) {0}  
-
-collisions_t            collisions_create           (arena_t* arena, uint32_t max_collisions, uint32_t max_key_length);
-void                    collisions_drop             (arena_t* arena, collisions_t* collisions);
-
-uint32_t                collisions_add              (collisions_t* collisions, utf8_t data);
-uint32_t                collisions_find             (arena_t* arena, collisions_t* collisions, utf8_t data);
-void                    collisions_remove           (collisions_t* collisions, uint32_t id);
-
-typedef uint32_t (*zenmap_hfunc_t)(utf8_t* string);
-
-#define BASE_FNV1_HASH_PRIME                        16777619U
-#define BASE_FNV1_HASH_BASE                         2166136261U
-uint32_t                zenmap_fnv1_hash            (utf8_t* string);
-
-typedef struct zenmap_t zenmap_t;
-struct zenmap_t {
-
-    utf8_t*             key_data;
-    void_ptr_t          value_data;
-
-    collisions_t*       collisions;
-    zenmap_hfunc_t      hashing_function;
-    uint32_t            block_size, block_count;    // NOTE(Joel Zbinden): ^2.
-
-    uint64_t            key_count;
-    uint16_t            max_key_length;
-    uint16_t            type_alignment;
-    uint32_t            type_size;
-
-};
-#define empty_zenmap_t                              (zenmap_t) {0}
-
-zenmap_t                zenmap_create_f             (arena_t* arena, uint32_t type_size, uint16_t type_alignment, uint32_t block_size, uint32_t block_count, uint16_t max_key_length, zenmap_hfunc_t func);
-#define zenmap_create_f(arena, type, algn, block_size, block_count, max_key_length, hash)                       \
-    zenmap_create_f((arena), (sizeof(type)), (algn), (block_size), (block_count), (max_key_length), (hash))
-
-void_ptr_t              zenmap_get_f                (zenmap_t* map, utf8_t* key, bool create);
-#define zenmap_get(map, type, key, create)                                                                      \
-    (type*)zenmap_get_f((map), (key), (create))
-
-err_t                   zenmap_remove               (zenmap_t* map, utf8_t* key);
-bool                    zenmap_has_key              (zenmap_t* map, utf8_t* key);
-
-array_t(utf8_t)         zenmap_get_keys             (zenmap_t* map);
-array_t(void)           zenmap_get_values           (zenmap_t* map);
-
-uint64_t                zenmap_get_memsize          (zenmap_t* map);
-uint64_t                zenmap_get_size             (zenmap_t* map);
-void                    zenmap_drop                 (arena_t* arena, zenmap_t* map);
-
+#define BASE_IMPLEMENTATION
 #if defined(BASE_IMPLEMENTATION)
 
 void print_error(err_t code, const i8_ptr_t message) {
@@ -665,7 +606,7 @@ int8_t bitmask128_get(bitmask128_t bitmask, uint32_t idx) {
 
 }
 
-i8_ptr_t bitmask_to_cstr(arena_t* arena, uint64_t numbers[], uint16_t nnumbers) {
+char* bitmask_to_cstr(arena_t* arena, uint64_t numbers[], uint16_t nnumbers) {
 
     const uint16_t precision = 64;
     if (nnumbers == 0 || numbers == nullptr) {
@@ -675,7 +616,7 @@ i8_ptr_t bitmask_to_cstr(arena_t* arena, uint64_t numbers[], uint16_t nnumbers) 
 
     if (arena == nullptr) {
 
-        i8_ptr_t result = calloc((precision * nnumbers) + 1, sizeof(char));
+        char* result = calloc((precision * nnumbers) + 1, sizeof(char));
         if (result == nullptr) {
             print_error(errno, "bitmask_to_cstr: calloc");
             return nullptr;
@@ -684,7 +625,7 @@ i8_ptr_t bitmask_to_cstr(arena_t* arena, uint64_t numbers[], uint16_t nnumbers) 
         goto finish;
     }
 
-    i8_ptr_t result = arena_alloc(arena, (precision * nnumbers) + 1, 1);
+    char* result = arena_alloc(arena, (precision * nnumbers) + 1, 1);
     if (result == nullptr) {
         print_error(errno, "bitmask_to_cstr: arena_alloc");
         return nullptr;
@@ -789,7 +730,8 @@ void utf8_drop(arena_t* arena, utf8_t* ptr) {
 
 }
 
-bitmask16_t simd_match_16char(uint8_t target, uint8_t subjects[16], uint8_t subject_count, bool diff) {
+internal inline __attribute__((always_inline))
+bitmask16_t simd_match_16u8(uint8_t target, uint8_t subjects[16]) {
 
     // NOTE(Joel Zbinden): subjects must be 16 byte aligned as 
     // the aligned load SIMD instruction requires this.
@@ -822,11 +764,7 @@ bitmask16_t simd_match_16char(uint8_t target, uint8_t subjects[16], uint8_t subj
     __m128i target_vector = _mm_set1_epi8(target);
     __m128i subject_vector = _mm_load_si128((const __m128i*)subjects);
     __m128i comparison_vector = _mm_cmpeq_epi8(target_vector, subject_vector);
-    bitmask16_t result = (bitmask16_t)_mm_movemask_epi8(comparison_vector);
-
-    return (diff == true) 
-        ? ~result
-        : result;
+    return (bitmask16_t)_mm_movemask_epi8(comparison_vector);
 
 #endif // BASE_SIMD_X86
 
@@ -834,7 +772,51 @@ bitmask16_t simd_match_16char(uint8_t target, uint8_t subjects[16], uint8_t subj
 
 }
 
-bitmask8_t simd_match_2u64(uint64_t target, uint64_t subjects[2], uint8_t subject_count, bool diff) {
+internal inline __attribute__((always_inline))
+bitmask8_t simd_match_4u32(uint32_t target, uint32_t subjects[4]) {
+
+    // NOTE(Joel Zbinden): subjects must be 16 byte aligned as 
+    // the aligned load SIMD instruction requires this.
+    assert(((uintptr_t)subjects & 15) == 0);
+
+#if defined(BASE_SIMD_NEON)
+
+    #error ARM Neon is currently not implemented.
+
+#endif // BASE_SIMD_NEON
+
+#if defined(BASE_SIMD_SVE)
+
+    #error ARM SVE is currently not implemented.
+
+#endif // BASE_SIMD_SVE
+
+#if defined(BASE_SIMD_WASM)
+
+    #error WASM SIMD is currently not implemented.
+
+#endif // BASE_SIMD_WASM
+
+#if defined(BASE_SIMD_X86)
+
+    #if !defined(__GNUC__) && !defined(__clang__)
+        #error "This SIMD implementation requires GCC or Clang"
+    #endif
+
+    __m128i target_vector = _mm_set1_epi32(target);
+    __m128i subject_vector = _mm_load_si128((const __m128i*)subjects);
+    __m128i cmp = _mm_cmpeq_epi32(target_vector, subject_vector);
+    return (bitmask8_t)_mm_movemask_pd(_mm_castsi128_pd(cmp));
+
+
+#endif // BASE_SIMD_X86
+
+    return 0;
+
+}
+
+internal inline __attribute__((always_inline))
+bitmask8_t simd_match_2u64(uint64_t target, uint64_t subjects[2]) {
 
     // NOTE(Joel Zbinden): subjects must be 16 byte aligned as 
     // the aligned load SIMD instruction requires this.
@@ -867,313 +849,12 @@ bitmask8_t simd_match_2u64(uint64_t target, uint64_t subjects[2], uint8_t subjec
     __m128i target_vector = _mm_set1_epi64x(target);
     __m128i subject_vector = _mm_load_si128((const __m128i*)subjects);
     __m128i cmp = _mm_cmpeq_epi64(target_vector, subject_vector);
-    bitmask8_t result = (bitmask8_t)_mm_movemask_pd(_mm_castsi128_pd(cmp));
+    return (bitmask8_t)_mm_movemask_pd(_mm_castsi128_pd(cmp));
 
-    return (diff == true) 
-        ? ~result
-        : result; 
-   
+
 #endif // BASE_SIMD_X86
 
     return 0;
-
-}
-
-collisions_t collisions_create(arena_t* arena, uint32_t max_collisions, uint32_t max_key_length) {
-
-    // NOTE(Joel Zbinden): Number of blocks or collisions and 
-    // maximum key length must be a powers of 2.
-    assert((max_collisions & (max_collisions - 1)) == 0);
-    assert((max_key_length & (max_key_length - 1)) == 0);
-
-    if (max_collisions == 0 || max_key_length == 0) {
-        print_error(EINVAL, "collisions_create");
-        return empty_collisions_t;
-    }
-
-    collisions_t result = empty_collisions_t;    
-    result.max = max_collisions;
-    result.key_max = max_key_length;
-    result.key_shift = __builtin_ctz(max_key_length);
-
-    result.free_list = array_create(arena, uint32_t, max_collisions);
-    for (size_t i = max_collisions; i > 0; i--)
-        result.free_list[array_size(result.free_list)++] = i;
-     
-    if (arena == nullptr) {
-
-        result.data = calloc(max_collisions << result.key_shift, sizeof(uint8_t));
-        if (result.data == nullptr) {
-            print_error(errno, "collision_create: calloc");
-            return empty_collisions_t;
-        }
-
-        result.interlaced = aligned_alloc(16, max_collisions);
-        if (result.interlaced == nullptr) {
-            print_error(errno, "collision_create: arena_alloc");
-            return empty_collisions_t;
-        }
-
-        memset(result.interlaced, 0, max_collisions);
-        return result;
-
-    }
-
-    result.data = arena_alloc(arena, max_collisions << result.key_shift, 1);
-    if (result.data == nullptr) {
-        print_error(errno, "collision_create: arena_alloc");
-        return empty_collisions_t;
-    }
-
-    result.interlaced = arena_alloc(arena, max_collisions, 16);
-    if (result.interlaced == nullptr) {
-        print_error(errno, "collision_create: arena_alloc");
-        return empty_collisions_t;
-    }
-
-    return result;
-
-}
-
-void collisions_drop(arena_t* arena, collisions_t* collisions) {
-
-    if (arena != nullptr || collisions == nullptr)
-        return;
-
-    if (collisions->data != nullptr)
-        free(collisions->data);
-    if (collisions->interlaced != nullptr)
-        free(collisions->interlaced);   
-    array_drop(arena, collisions->free_list);
-
-}
-
-uint32_t collisions_add(collisions_t* collisions, utf8_t data) {
-
-    if (collisions == nullptr || data.data == nullptr || data.size == 0) {
-        print_error(EINVAL, "collisions_add");
-        return UINT32_MAX;
-    }
-  
-    if ((array_size(collisions->free_list) - 1) < 0) {
-        print_error(ENOMEM, "collisions_add");
-        return UINT32_MAX;
-    }
-
-    uint32_t result = collisions->free_list[array_size(collisions->free_list)--];
-    __builtin_prefetch(collisions->data + (result << collisions->key_shift), 1, 1); // NOTE(Joel Zbinden): might not be doing much, but I tried.
-
-    collisions->interlaced[result] = data.data[0];
-    memcpy(collisions->data + (result << collisions->key_shift), data.data, data.size);
-    collisions->data[(result << collisions->key_shift) + data.size] = '\0';
-    return result;
-
-}
-
-uint32_t collisions_find(arena_t* arena, collisions_t* collisions, utf8_t data) {
-
-    if (collisions == nullptr || data.data == nullptr || data.size == 0) {
-        print_error(EINVAL, "collisions_find");
-        return UINT32_MAX;
-    }
-    
-    uint32_t result         = UINT32_MAX;
-    uint32_t passes         = collisions->max >> 4;
-    uint32_t chars_left     = collisions->max & 15;
- 
-    for (uint32_t i = 0; i < passes; i++) {
-        for (bitmask16_t mask = simd_match_16char(data.data[0], collisions->interlaced + (i << 4), 16, false); mask; mask &= mask - 1) {
-            uint32_t id = (i << 4) + __builtin_ctz(mask);
-            if (strcmp(data.data, collisions->data + (id << collisions->key_shift)) == 0)
-                return id;
-        }
-    }
-
-    for (bitmask16_t mask = simd_match_16char(data.data[0], collisions->interlaced + (passes << 4), chars_left, false); mask; mask &= mask - 1) {
-        uint32_t id = (passes << 4) + __builtin_ctz(mask);
-        if (strcmp(data.data, collisions->data + (id << collisions->key_shift)) == 0)
-            return id;
-    }
-
-    return UINT32_MAX;
-
-}
-
-void collisions_remove(collisions_t* collisions, uint32_t id) {
-
-    if (collisions == nullptr || id == UINT32_MAX) {
-        print_error(EINVAL, "collisions_remove");
-        return;
-    }
-
-    collisions->interlaced[id] = 0;
-    collisions->free_list[array_size(collisions->free_list)++] = id;
-    memset(collisions->data + (id << collisions->key_shift), 0, collisions->key_max);
-
-}
-
-uint32_t zenmap_fnv1_hash(utf8_t* string) {
-
-    uint32_t hash = BASE_FNV1_HASH_BASE;
-    for (size_t i = 0; i < string->size; i++) {
-        hash = hash * BASE_FNV1_HASH_PRIME;
-        hash = hash ^ string->data[i];
-    }
-    return hash;
-
-}
-
-zenmap_t zenmap_create (
-    arena_t* arena, 
-    uint32_t type_size, 
-    uint16_t type_alignment, 
-    uint32_t block_size, 
-    uint32_t block_count, 
-    uint16_t max_key_length, 
-    zenmap_hfunc_t func
-) {
-
-    if (block_size == 0 || block_count == 0) {
-        print_error(EINVAL, "zenmap_create");
-        return empty_zenmap_t;
-    }
-
-    zenmap_t result             = empty_zenmap_t;
-    result.block_count          = block_count;                          // NOTE(Joel Zbinden): ^2
-    result.block_size           = block_size;                           // NOTE(Joel Zbinden): ^2
-    result.max_key_length       = max_key_length;                       // NOTE(Joel Zbinden): ^2
-    result.type_alignment       = type_alignment;
-    result.type_size            = type_size;
-    result.hashing_function     = func;
-
-    uint64_t value_data_size    = block_count * block_size * type_size;
-    uint64_t key_data_size      = block_count * block_size * sizeof(utf8_t);
-
-    if (arena == nullptr) {
-
-        result.key_data = aligned_alloc(8, key_data_size);
-        if (result.key_data == nullptr) {
-            print_error(errno, "zenmap_create: arena_alloc");
-            return empty_zenmap_t;
-        }
-        memset(result.key_data, 0, key_data_size);
-
-        result.value_data = aligned_alloc(type_alignment, value_data_size);
-        if (result.value_data == nullptr) {
-            print_error(errno, "zenmap_create: arena_alloc");
-            return empty_zenmap_t;
-        }
-        memset(result.value_data, 0, value_data_size);
-
-        result.collisions = aligned_alloc(8, sizeof(collisions_t) * block_size);
-        if (result.collisions == nullptr) {
-            print_error(errno, "zenmap_create: aligned_alloc");
-            return empty_zenmap_t;
-        }
-        
-        for (uint32_t i = 0; i < block_size; i++)
-            result.collisions[i] = collisions_create(nullptr, block_count, max_key_length);
-        return result;
-
-    }
-
-    result.key_data = arena_alloc(arena, key_data_size, 8);
-    if (result.key_data == nullptr) {
-        print_error(errno, "zenmap_create: arena_alloc");
-        return empty_zenmap_t;
-    }
-
-    result.value_data = arena_alloc(arena, value_data_size, type_alignment);
-    if (result.value_data == nullptr) {
-        print_error(errno, "zenmap_create: arena_alloc");
-        return empty_zenmap_t;
-    }
-    
-    result.collisions = arena_alloc(arena, sizeof(collisions_t) * block_size, 8);
-    if (result.collisions == nullptr) {
-        print_error(errno, "zenmap_create: arena_alloc");
-        return empty_zenmap_t;
-    }
-    
-    for (uint32_t i = 0; i < block_size; i++)
-        result.collisions[i] = collisions_create(arena, block_count, max_key_length);
-    return result;
-
-}
-
-void_ptr_t zenmap_get_f(zenmap_t* map, utf8_t* key, bool create) {
-
-    assert(0 && "TODO(Joel Zbinden): implement zenmap_get_f");
-    return nullptr;
-
-}
-
-err_t zenmap_remove(zenmap_t* map, utf8_t* key) {
-
-    assert(0 && "TODO(Joel Zbinden): implement zenmap_remove");
-    return failure;
-
-}
-
-bool zenmap_has_key(zenmap_t* map, utf8_t* key) {
-
-    assert(0 && "TODO(Joel Zbinden): implement zenmap_has_key");
-    return false;
-
-}
-
-array_t(utf8_t) zenmap_get_keys(zenmap_t* map) {
-
-    assert(0 && "TODO(Joel Zbinden): implement zenmap_get_keys");
-    return nullptr;
-
-}
-
-array_t(void) zenmap_get_values(zenmap_t* map) {
-
-    assert(0 && "TODO(Joel Zbinden): implement zenmap_get_values");
-    return nullptr;
-
-}
-
-// NOTE(Joel Zbinden): does not compute padding
-uint64_t zenmap_get_memsize(zenmap_t* map) {
-
-    uint64_t collisions_free_list   = (sizeof(array_head_t) + map->block_size * sizeof(uint32_t)) * map->block_size;
-    uint64_t collisions_data        = (map->block_count * map->max_key_length) * map->block_size;
-    uint64_t collisions_interlaced  = (map->block_count) * map->block_size;
-
-    uint64_t collisions_size = (
-        (sizeof(collisions_t) * map->block_size) 
-        + collisions_free_list 
-        + collisions_data 
-        + collisions_interlaced
-    );
-
-    uint64_t map_size           = sizeof(zenmap_t);
-    uint64_t value_data_size    = map->block_count * map->block_size * map->type_size;
-    uint64_t key_data_size      = map->block_count * map->block_size * sizeof(utf8_t);
-
-    return (map_size + collisions_size + value_data_size + key_data_size);
-}
-
-uint64_t zenmap_get_size(zenmap_t* map) {
-
-    return map->key_count;
-
-}
-
-void bmap_drop(arena_t* arena, zenmap_t* map) {
-
-    if (arena != nullptr || map == nullptr)
-        return;
-
-    if (map->collisions != nullptr)
-        free(map->collisions);
-    if (map->key_data != nullptr)
-        free(map->key_data);
-    if (map->value_data != nullptr)
-        free(map->value_data);
 
 }
 
